@@ -7,7 +7,7 @@ import sys
 # Ensure Python can find our agents package
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from agents.verification_agent.main import process_verification
+from app.services.agents.itr_agent.main import process_verification
 
 def create_dummy_image(filepath):
     dummy_image = np.ones((400, 800, 3), dtype=np.uint8) * 255
