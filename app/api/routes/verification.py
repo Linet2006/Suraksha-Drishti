@@ -47,7 +47,7 @@ async def verify_itr(request: VerificationRequest):
         decision = "Auto-Approve"
         
         if api_record and api_record.get("status") == "error":
-            risk_score += 100
+            risk_score += 50
             issues.append(api_record.get("message", "Record NOT FOUND in Government DB."))
         elif api_record and api_record.get("status") == "success":
             govt_income = api_record.get("govt_income")
@@ -58,7 +58,7 @@ async def verify_itr(request: VerificationRequest):
                     income_val = int(str(request.income).replace(",", "").strip())
                     govt_income_val = int(str(govt_income).replace(",", "").strip())
                     if income_val != govt_income_val:
-                        risk_score += 50
+                        risk_score += 100
                         issues.append(f"Income Mismatch! Doc: {request.income}, Govt: {govt_income}")
                 except ValueError:
                     issues.append("Could not parse income mathematically.")

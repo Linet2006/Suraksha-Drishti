@@ -1,6 +1,6 @@
 import asyncio
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth
+from playwright_stealth import Stealth
 import time
 import logging
 
@@ -16,16 +16,20 @@ def verify_itr_status(pan: str, ack_number: str) -> dict:
     
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            # We run using the user's local Microsoft Edge instead of bundled Chromium!
+            # The government WAF (automation-validator.js) easily detects bundled Chromium TLS fingerprints.
+            # Using the native Windows Edge browser completely bypasses this because it is a 100% real browser.
+            browser = p.chromium.launch(channel="msedge", headless=False, slow_mo=50)
+            
             # Add a realistic user agent to avoid basic bot blocking
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
                 viewport={"width": 1920, "height": 1080}
             )
             page = context.new_page()
             
             # Apply stealth mode to mask Playwright headless signatures (bypasses advanced WAF/Cloudflare)
-            stealth(page)
+            Stealth().apply_stealth_sync(page)
 
             # Navigate to the public ITR Status check utility
             target_url = "https://eportal.incometax.gov.in/iec/foservices/#/pre-login/itrStatus"
@@ -34,14 +38,21 @@ def verify_itr_status(pan: str, ack_number: str) -> dict:
                 logger.info(f"Navigating to {target_url}")
                 # Use domcontentloaded to prevent hanging on external tracking scripts
                 page.goto(target_url, timeout=45000, wait_until="domcontentloaded")
+                
+                # Check if the government portal redirected us to the homepage (Service Disabled)
+                page.wait_for_timeout(3000) # Give Angular 3 seconds to trigger any redirects
+                if "itrStatus" not in page.url:
+                    logger.warning(f"Portal redirected to {page.url}. The public ITR status service is currently disabled by the Govt.")
+                    browser.close()
+                    return {"status": "error", "message": "The Government has temporarily disabled the public ITR Status page (Redirected to Home)."}
+
                 logger.info("Successfully loaded Income Tax Portal. Waiting for form elements...")
                 
-                # Wait for the main container to load
-                page.wait_for_selector("input", timeout=15000)
-                
                 logger.info("Attempting to fill PAN...")
+                # The portal is an Angular app that can take 10-20 seconds to render the form after DOM loads.
+                # We wait specifically for the PAN input with a generous 30-second timeout.
                 pan_input = page.locator("input[formcontrolname='pan'], input[id*='pan' i], input[placeholder*='PAN' i]").first
-                pan_input.wait_for(state="visible", timeout=10000)
+                pan_input.wait_for(state="visible", timeout=30000)
                 pan_input.fill(pan)
                 
                 logger.info("Attempting to fill Acknowledgment Number...")
