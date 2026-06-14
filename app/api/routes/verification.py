@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 from app.services.agents.itr_agent.main import process_verification
+from app.services.agents.udyam_agent.scraper import verify_udyam_number, UdyamVerificationError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -12,6 +13,21 @@ class VerificationRequest(BaseModel):
     ack_number: str
     income: Optional[int] = None
     name: Optional[str] = None
+
+class UdyamVerifyRequest(BaseModel):
+    udyam_number: str
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "udyam_number": "UDYAM-XX-00-0000000"
+            }
+        }
+    }
+
+class UdyamVerifyResponse(BaseModel):
+    status: str
+    data: dict
 
 @router.post("/verify/itr")
 async def verify_itr(request: VerificationRequest):
@@ -30,11 +46,6 @@ async def verify_itr(request: VerificationRequest):
     }
     
     try:
-        # We call the process_verification function in "direct data" mode by patching the OCR
-        # Since is_image is normally true for the full flow, we can simulate an image pass 
-        # or just pass the data directly. Currently `process_verification` expects `input_data` to be an ack_number if `is_image` is False.
-        # Let's write a small wrapper or just use the agent logic.
-        
         from app.services.agents.itr_agent.scraper import verify_itr_status
         from fastapi.concurrency import run_in_threadpool
         
@@ -91,3 +102,32 @@ async def verify_itr(request: VerificationRequest):
     except Exception as e:
         logger.error(f"Error processing verification: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/verify/udyam", response_model=UdyamVerifyResponse)
+async def verify_udyam(request: UdyamVerifyRequest):
+    """
+    Endpoint to verify a Udyam Registration Number.
+    Uses headless Chromium and Tesseract OCR to bypass CAPTCHA.
+    """
+    logger.info(f"Received API request for Udyam Number: {request.udyam_number}")
+    try:
+        # Call the Playwright automation script
+        extracted_data = await verify_udyam_number(request.udyam_number)
+        
+        # Include the original input number in the response payload
+        response_data = {"udyam_number": request.udyam_number}
+        response_data.update(extracted_data)
+        
+        return {
+            "status": "success",
+            "data": response_data
+        }
+        
+    except UdyamVerificationError as e:
+        # Catch our custom domain error and raise an HTTP Exception
+        logger.warning(f"Udyam verification failed: {e.message}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        # Catch any unexpected errors
+        logger.error(f"Unexpected error in Udyam verification: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
