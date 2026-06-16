@@ -16,32 +16,33 @@ class UdyamVerificationError(Exception):
         self.status_code = status_code
         super().__init__(self.message)
 
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Configure Gemini API
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
 def solve_captcha(image_bytes: bytes) -> str:
-    """Pre-processes the CAPTCHA image using PIL and extracts text via Tesseract OCR."""
+    """Pre-processes the CAPTCHA image and extracts text via Gemini API."""
     try:
         # Load image from memory
         img = Image.open(io.BytesIO(image_bytes))
         
-        # Pre-process 1: Convert to Grayscale
-        img = img.convert('L')
+        # Use gemini-3.5-flash for fast vision tasks
+        model = genai.GenerativeModel('gemini-3.5-flash')
         
-        # Pre-process 2: Increase Contrast to make text stand out
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(2.0)
+        prompt = "Extract the text from this CAPTCHA image. Return ONLY the extracted alphanumeric characters, with NO spaces, NO punctuation, and NO markdown formatting. It is usually 6 uppercase letters and numbers."
         
-        # Pre-process 3: Thresholding (Binarization)
-        # Pixels > 128 become white (255), else black (0)
-        img = img.point(lambda p: 255 if p > 128 else 0)
+        response = model.generate_content([prompt, img])
         
-        # Tesseract configuration for alphanumeric codes
-        # --psm 8: Treat image as a single word
-        custom_config = r'--psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        
-        # Extract text
-        captcha_text = pytesseract.image_to_string(img, config=custom_config)
-        return captcha_text.strip()
+        captcha_text = response.text.strip().replace(" ", "")
+        return captcha_text
     except Exception as e:
-        print(f"OCR Error: {e}")
+        print(f"Gemini API Error: {e}")
         return ""
 
 async def verify_udyam_number(udyam_number: str) -> dict:
@@ -103,7 +104,7 @@ async def verify_udyam_number(udyam_number: str) -> dict:
                 captcha_bytes = await captcha_element.screenshot()
                 
                 # Solve CAPTCHA
-                with open(f"debug_captcha_attempt_{attempt}.png", "wb") as f:
+                with open(f"data/debug/debug_captcha_attempt_{attempt}.png", "wb") as f:
                     f.write(captcha_bytes)
                 captcha_text = solve_captcha(captcha_bytes)
                 print(f"Extracted CAPTCHA: '{captcha_text}'")
@@ -113,38 +114,50 @@ async def verify_udyam_number(udyam_number: str) -> dict:
                     await page.fill(captcha_input_id, captcha_text)
                 await page.click(verify_button_id)
                 
-                # Wait for response (network activity to settle)
+                # Wait for response (dynamic polling because the government portal can be very slow)
                 import asyncio
-                await asyncio.sleep(3) # Wait 3 seconds explicitly for any AJAX to complete
-                await page.screenshot(path=f"debug_page_after_verify_attempt_{attempt}.png")
                 
-                # Print all label texts for debugging
-                lblMsg = await page.query_selector("#ctl00_ContentPlaceHolder1_lblMsg")
-                if lblMsg:
-                    print(f"lblMsg text: '{await lblMsg.inner_text()}'")
+                success_element = None
+                captcha_err_text = ""
+                err_msg = ""
                 
-                lblCaptchaMsg = await page.query_selector("#ctl00_ContentPlaceHolder1_lblCaptchaMsg")
-                if lblCaptchaMsg:
-                    print(f"lblCaptchaMsg text: '{await lblCaptchaMsg.inner_text()}'")
+                print("Waiting for government portal to process...")
+                for _ in range(20):
+                    await asyncio.sleep(1)
+                    
+                    # 1. Check if success data loaded
+                    success_element = await page.query_selector("#ctl00_ContentPlaceHolder1_lblEnterpriseName")
+                    if success_element:
+                        break
+                        
+                    # 2. Check if CAPTCHA error appeared
+                    lblCaptchaMsg = await page.query_selector("#ctl00_ContentPlaceHolder1_lblCaptchaMsg")
+                    if lblCaptchaMsg and await lblCaptchaMsg.is_visible():
+                        captcha_err_text = await lblCaptchaMsg.inner_text()
+                        if "Invalid" in captcha_err_text:
+                            break
+                            
+                    # 3. Check for Invalid Udyam Number error
+                    lblMsg = await page.query_selector("#ctl00_ContentPlaceHolder1_lblMsg")
+                    if lblMsg and await lblMsg.is_visible():
+                        err_msg = await lblMsg.inner_text()
+                        if "Invalid" in err_msg or "does not exist" in err_msg.lower():
+                            break
+                            
+                await page.screenshot(path=f"data/debug/debug_page_after_verify_attempt_{attempt}.png")
                 
-                # Check for Invalid Udyam Number
-                if lblMsg:
-                    err_msg = await lblMsg.inner_text()
-                    if "Invalid" in err_msg or "does not exist" in err_msg.lower():
-                        raise UdyamVerificationError(f"Udyam Number Error: {err_msg}", 400)
-                
-                # Check for CAPTCHA error
-                if lblCaptchaMsg:
-                    captcha_err_text = await lblCaptchaMsg.inner_text()
-                    if "Invalid Verification Code" in captcha_err_text:
-                        print("Invalid Verification Code. Refreshing CAPTCHA and retrying...")
-                        # Click the refresh button to load a new CAPTCHA
-                        refresh_btn = await page.query_selector("#ctl00_ContentPlaceHolder1_ImgRefresh")
-                        if refresh_btn:
-                            await refresh_btn.click()
-                            import asyncio
-                            await asyncio.sleep(2) # Give it time to load the new image
-                        continue
+                # Handle Invalid Udyam Number
+                if "Invalid" in err_msg or "does not exist" in err_msg.lower():
+                    raise UdyamVerificationError(f"Udyam Number Error: {err_msg}", 400)
+                    
+                # Handle CAPTCHA error
+                if "Invalid Verification Code" in captcha_err_text:
+                    print("Invalid Verification Code. Refreshing CAPTCHA and retrying...")
+                    refresh_btn = await page.query_selector("#ctl00_ContentPlaceHolder1_ImgRefresh")
+                    if refresh_btn:
+                        await refresh_btn.click()
+                        await asyncio.sleep(2) # Give it time to load the new image
+                    continue
                 
                 # Step 5: Data Extraction
                 success_element = await page.query_selector("#ctl00_ContentPlaceHolder1_lblEnterpriseName")
@@ -171,7 +184,7 @@ async def verify_udyam_number(udyam_number: str) -> dict:
                     return data
             
             # Step 6: Max retries reached
-            raise UdyamVerificationError("Max CAPTCHA retries reached. Tesseract failed to solve the CAPTCHA.", 422)
+            raise UdyamVerificationError("Max CAPTCHA retries reached. Gemini API failed to solve the CAPTCHA.", 422)
             
         except PlaywrightTimeoutError:
             raise UdyamVerificationError("Government portal timed out or is unavailable.", 503)

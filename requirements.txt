@@ -7,3 +7,6 @@ uvicorn
 playwright
 Pillow
 pydantic
+google-generativeai
+python-dotenv
+playwright-stealth
