@@ -15,8 +15,11 @@ def error_level_analysis(image_path, quality=90, threshold=15.0):
         if original.mode != 'RGB':
             original = original.convert('RGB')
             
-        original.save("temp_resaved.jpg", "JPEG", quality=quality)
-        resaved = Image.open("temp_resaved.jpg")
+        output_dir = os.path.abspath("data/outputs/salaryslip")
+        os.makedirs(output_dir, exist_ok=True)
+        temp_path = os.path.join(output_dir, "temp_resaved.jpg")
+        original.save(temp_path, "JPEG", quality=quality)
+        resaved = Image.open(temp_path)
         
         ela_image = ImageChops.difference(original, resaved)
         
@@ -35,10 +38,10 @@ def error_level_analysis(image_path, quality=90, threshold=15.0):
         gray_ela = cv2.cvtColor(ela_cv, cv2.COLOR_BGR2GRAY)
         heatmap = cv2.applyColorMap(gray_ela, cv2.COLORMAP_JET)
         
-        # Save the heatmap in the same directory
-        output_dir = os.path.dirname(image_path)
-        if not output_dir: output_dir = "."
-        heatmap_path = os.path.join(output_dir, "ela_heatmap.jpg")
+        # Save the heatmap to the structured outputs directory
+        output_dir = os.path.abspath("data/outputs/salaryslip")
+        os.makedirs(output_dir, exist_ok=True)
+        heatmap_path = os.path.join(output_dir, f"ela_heatmap_{int(datetime.datetime.now().timestamp())}.jpg")
         cv2.imwrite(heatmap_path, heatmap)
         print(f"\n[+] Generated ELA Heatmap: {heatmap_path}")
         # ------------------------

@@ -11,8 +11,9 @@ async def verify_salary_slip(file: UploadFile = File(...)):
     """
     Upload a salary slip image to be processed by the 6-Layer DNA Engine.
     """
-    # Save the uploaded file temporarily
-    temp_file_path = f"temp_{file.filename}"
+    # Save the uploaded file temporarily to the outputs directory
+    temp_file_path = f"data/outputs/salaryslip/temp_{file.filename}"
+    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
     with open(temp_file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         

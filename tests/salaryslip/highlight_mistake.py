@@ -1,9 +1,11 @@
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 import cv2
 import numpy as np
 import sys
 import os
 
-def highlight_esi_mistake(image_path="slip.jpg"):
+def highlight_esi_mistake(image_path="../../data/debug/salaryslip/slip.jpg"):
     print(f"Analyzing original image ({image_path}) to automatically locate the ESI deduction...")
     
     # Load the original slip to find the red text coordinates

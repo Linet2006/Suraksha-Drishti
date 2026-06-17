@@ -1,3 +1,5 @@
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 import sys
 import os
 import json
@@ -11,28 +13,28 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.services.agents.salary_slip_agent.main import process_verification
 
-new_slip_data = {
-    "raw_text": "NEXORA TECHNOLOGIES PVT. LTD. SALARY SLIP May 2026 This is a computer-generated salary slip and does not require a physical signature.",
-    "company_name": "NEXORA TECHNOLOGIES PVT. LTD.",
-    "city": "Mumbai",
+# Extracted exactly from your image
+nexatech_slip = {
+    "raw_text": "NEXATECH SOLUTIONS PRIVATE LIMITED SALARY SLIP MAY 2026 Employee ID: NXT-EMP-20214",
+    "company_name": "NEXATECH SOLUTIONS PRIVATE LIMITED",
+    "city": "Bengaluru",
     "extracted_data": {
-        "basic": 30000,
-        "hra": 12000,
-        "pf": 1800,
+        "basic": 45000,
+        "hra": 18000,
+        "pf": 5400,
         "pt": 200,
-        "esic": 0,
-        "tds": 1500,
-        "gross_pay": 50000,
-        "total_deductions": 3500,
-        "net_pay": 46500
+        "esic": 662,  # Notice this! ESI shouldn't apply if Gross > 21k
+        "tds": 3500,
+        "gross_pay": 80950,
+        "total_deductions": 9762,
+        "net_pay": 71188
     }
 }
 
 if __name__ == "__main__":
-    print(f"\nProcessing Nexora Slip from Chat Image...\n")
-    # For now, pass is_image=False to use our mock OCR, 
-    # but we will also run test_real_photo on it for the L1 visual forensics.
-    result = process_verification(new_slip_data, is_image=False)
+    print(f"\nProcessing Nexatech Slip from Chat Image...\n")
+    
+    result = process_verification(nexatech_slip, is_image=False)
     
     print("="*50)
     print(f"DECISION: {result['routing']['decision']} (Score: {result['routing']['score']})")

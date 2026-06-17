@@ -1,8 +1,10 @@
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 import cv2
 import sys
 import os
 
-def highlight_paradox(image_path="new_slip.jpg"):
+def highlight_paradox(image_path="../../data/debug/salaryslip/new_slip.jpg"):
     img = cv2.imread(image_path)
     if img is None:
         print(f"Error: Could not load {image_path}")

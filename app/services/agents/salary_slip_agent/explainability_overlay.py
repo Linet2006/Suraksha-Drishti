@@ -99,8 +99,8 @@ def generate_overlay(image_path, issues_list):
         basename = os.path.basename(image_path)
         name, ext = os.path.splitext(basename)
         output_filename = f"{name}_highlighted{ext}"
-        output_dir = os.path.dirname(image_path)
-        if not output_dir: output_dir = "."
+        output_dir = os.path.abspath("data/outputs/salaryslip")
+        os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, output_filename)
         
         cv2.imwrite(output_path, img)
