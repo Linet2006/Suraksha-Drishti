@@ -126,7 +126,7 @@ async def verify_itr(request: VerificationRequest):
 async def verify_udyam(request: UdyamVerifyRequest):
     """
     Endpoint to verify a Udyam Registration Number.
-    Uses headless Chromium and Tesseract OCR to bypass CAPTCHA.
+    Uses headless Chromium and Gemini AI to bypass CAPTCHA.
     """
     logger.info(f"Received API request for Udyam Number: {request.udyam_number}")
     try:

@@ -59,6 +59,13 @@ async def verify_udyam_number(udyam_number: str) -> dict:
         context = await browser.new_context()
         page = await context.new_page()
         
+        dialog_messages = []
+        async def handle_dialog(dialog):
+            dialog_messages.append(dialog.message)
+            await dialog.accept()
+            
+        page.on("dialog", handle_dialog)
+        
         try:
             # Step 1 & 2: Navigate to homepage first to avoid bot detection redirects
             home_url = "https://udyamregistration.gov.in/Default.aspx"
@@ -94,7 +101,7 @@ async def verify_udyam_number(udyam_number: str) -> dict:
             
             # Step 4: Retry Loop for Zero-Cost CAPTCHA Bypass
             for attempt in range(1, max_retries + 1):
-                print(f"Attempt {attempt}: Processing CAPTCHA...")
+                print(f"Attempt {attempt}: Processing CAPTCHA...", flush=True)
                 
                 # Locate CAPTCHA image and save to memory
                 captcha_element = await page.query_selector(captcha_img_id)
@@ -107,7 +114,7 @@ async def verify_udyam_number(udyam_number: str) -> dict:
                 with open(f"data/debug/debug_captcha_attempt_{attempt}.png", "wb") as f:
                     f.write(captcha_bytes)
                 captcha_text = solve_captcha(captcha_bytes)
-                print(f"Extracted CAPTCHA: '{captcha_text}'")
+                print(f"Extracted CAPTCHA: '{captcha_text}'", flush=True)
                 
                 # Fill CAPTCHA and submit
                 if captcha_text:
@@ -121,7 +128,7 @@ async def verify_udyam_number(udyam_number: str) -> dict:
                 captcha_err_text = ""
                 err_msg = ""
                 
-                print("Waiting for government portal to process...")
+                print("Waiting for government portal to process...", flush=True)
                 for _ in range(20):
                     await asyncio.sleep(1)
                     
@@ -144,15 +151,22 @@ async def verify_udyam_number(udyam_number: str) -> dict:
                         if "Invalid" in err_msg or "does not exist" in err_msg.lower():
                             break
                             
+                    # 4. Check for Javascript dialogs (alerts)
+                    if dialog_messages:
+                        break
+                            
                 await page.screenshot(path=f"data/debug/debug_page_after_verify_attempt_{attempt}.png")
                 
                 # Handle Invalid Udyam Number
+                if dialog_messages:
+                    raise UdyamVerificationError(f"Udyam Number Error: {dialog_messages[0]}", 400)
+                    
                 if "Invalid" in err_msg or "does not exist" in err_msg.lower():
                     raise UdyamVerificationError(f"Udyam Number Error: {err_msg}", 400)
                     
                 # Handle CAPTCHA error
                 if "Invalid Verification Code" in captcha_err_text:
-                    print("Invalid Verification Code. Refreshing CAPTCHA and retrying...")
+                    print("Invalid Verification Code. Refreshing CAPTCHA and retrying...", flush=True)
                     refresh_btn = await page.query_selector("#ctl00_ContentPlaceHolder1_ImgRefresh")
                     if refresh_btn:
                         await refresh_btn.click()
