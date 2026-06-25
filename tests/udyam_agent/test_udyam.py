@@ -1,5 +1,10 @@
 import requests
 import time
+import os
+import sys
+
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.append(root_dir)
 
 def test_udyam_verification():
     url = "http://localhost:8000/api/v1/verify/udyam"

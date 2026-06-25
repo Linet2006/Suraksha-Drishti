@@ -1,6 +1,11 @@
 import requests
 import time
 import json
+import os
+import sys
+
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.append(root_dir)
 
 def test_trade_licence_verification():
     url = "http://localhost:8000/api/v1/verify/trade_licence"

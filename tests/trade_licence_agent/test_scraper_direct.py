@@ -1,4 +1,10 @@
 import asyncio
+import os
+import sys
+
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.append(root_dir)
+
 from app.services.agents.trade_licence_agent.scraper import verify_trade_licence
 
 async def main():
