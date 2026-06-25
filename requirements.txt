@@ -2,3 +2,11 @@ pytesseract
 opencv-python>=4.10.0
 numpy>=2.0.0
 matplotlib
+fastapi
+uvicorn
+playwright
+Pillow
+pydantic
+google-generativeai
+python-dotenv
+playwright-stealth
