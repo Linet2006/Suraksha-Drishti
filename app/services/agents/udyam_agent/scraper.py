@@ -17,14 +17,14 @@ class UdyamVerificationError(Exception):
         super().__init__(self.message)
 
 import os
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini API
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Initialize Gemini Client
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def solve_captcha(image_bytes: bytes) -> str:
     """Pre-processes the CAPTCHA image and extracts text via Gemini API."""
@@ -32,12 +32,13 @@ def solve_captcha(image_bytes: bytes) -> str:
         # Load image from memory
         img = Image.open(io.BytesIO(image_bytes))
         
-        # Use gemini-3.5-flash for fast vision tasks
-        model = genai.GenerativeModel('gemini-3.5-flash')
-        
         prompt = "Extract the text from this CAPTCHA image. Return ONLY the extracted alphanumeric characters, with NO spaces, NO punctuation, and NO markdown formatting. It is usually 6 uppercase letters and numbers."
         
-        response = model.generate_content([prompt, img])
+        # Use gemini-3.5-flash for fast vision tasks
+        response = client.models.generate_content(
+            model='gemini-3.5-flash',
+            contents=[prompt, img]
+        )
         
         captcha_text = response.text.strip().replace(" ", "")
         return captcha_text
