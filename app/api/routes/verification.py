@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, File, UploadFile, Form, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 import logging
@@ -6,6 +6,10 @@ from app.services.agents.itr_agent.main import process_verification
 from app.services.agents.udyam_agent.scraper import verify_udyam_number, UdyamVerificationError
 from app.services.agents.trade_licence_agent.scraper import verify_trade_licence, TradeLicenceVerificationError
 import os
+import json
+import shutil
+import tempfile
+from app.services.dna_comparison.itr_dna.main import run_itr_dna_analysis
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -259,5 +263,46 @@ async def verify_trade_licence_endpoint(request: TradeLicenseVerifyRequest, back
             "expected_owner_name": request.expected_owner_name
         }
     }
-    
     return output
+
+@router.post("/verify/itr_dna")
+async def verify_itr_dna(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    metadata: str = Form(...)
+):
+    """
+    ITR DNA Forensics Endpoint.
+    Validates income tax returns and Form 16s by checking math logic, 
+    metadata manipulation, and government registry consistency.
+    """
+    logger.info(f"Received ITR DNA verification request for file: {file.filename}")
+    
+    try:
+        meta_dict = json.loads(metadata)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format for metadata.")
+        
+    is_pdf = file.filename.lower().endswith(".pdf")
+    
+    # Save the file to a temporary location for forensics processing
+    try:
+        suffix = ".pdf" if is_pdf else os.path.splitext(file.filename)[1]
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        temp_path = temp_file.name
+        
+        with temp_file:
+            shutil.copyfileobj(file.file, temp_file)
+            
+        # Add cleanup to background tasks
+        background_tasks.add_task(cleanup_pdf, temp_path)
+        
+        # Run the forensics analysis
+        from fastapi.concurrency import run_in_threadpool
+        result = await run_in_threadpool(run_itr_dna_analysis, temp_path, is_pdf, meta_dict)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in ITR DNA Endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error during forensic analysis.")

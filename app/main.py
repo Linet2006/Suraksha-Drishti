@@ -1,5 +1,7 @@
 from fastapi import FastAPI
-from app.api.routes import verification
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes.verification import router as verification_router
+from app.api.routes.orchestration import router as orchestration_router
 import uvicorn
 import sys
 import asyncio
@@ -14,8 +16,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For dev purposes, allow all origins (frontend will be on 5173)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include our routes
-app.include_router(verification.router, prefix="/api/v1")
+app.include_router(verification_router, prefix="/api/v1")
+app.include_router(orchestration_router, prefix="/api/v1")
 
 @app.get("/")
 def read_root():
