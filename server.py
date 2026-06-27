@@ -25,13 +25,17 @@ async def verify_salary_slip(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
         
     try:
+        # Guarantee OpenCV compatibility (convert PDF/AVIF to standard JPEG)
+        from app.services.dna_comparison.main import ensure_image_format
+        temp_file_path = ensure_image_format(temp_file_path)
+        
         # Run the DNA engine pipeline
         result = process_verification(temp_file_path, is_image=True)
         
-        # In a real scenario, you might upload the highlighted image to S3 and return the URL.
-        # Here we just return the local absolute path for the demo.
+        # Return the Visual Proof URL just like the KYC engine
         if result['explainability'].get('highlighted_image_path'):
-            result['explainability']['highlighted_image_path'] = os.path.abspath(result['explainability']['highlighted_image_path'])
+            filename = os.path.basename(result['explainability']['highlighted_image_path'])
+            result['explainability']['Visual Proof'] = f"http://localhost:8000/outputs/salaryslip/{filename}"
             
         return result
         
@@ -39,9 +43,17 @@ async def verify_salary_slip(file: UploadFile = File(...)):
         return {"error": str(e)}
         
     finally:
-        # We leave the temp image and the highlighted image so the user can see them,
-        # but in production, we would clean up the temp file here.
-        pass
+        import glob
+        cleanup_patterns = [
+            "data/outputs/salaryslip/temp_*",
+            "data/outputs/salaryslip/ela_heatmap_*"
+        ]
+        for pattern in cleanup_patterns:
+            for filepath in glob.glob(pattern):
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
 
 @app.post("/verify/kyc")
 async def verify_kyc(
@@ -134,6 +146,21 @@ async def verify_kyc(
         
     except Exception as e:
         return {"error": str(e)}
+        
+    finally:
+        # CLEANUP: Delete all temporary files, converted images, and unused ELA heatmaps
+        # We only want to keep the final 'proof_' visual overlays for the user!
+        import glob
+        cleanup_patterns = [
+            "data/outputs/kyc/temp_*",
+            "data/outputs/kyc/ela_heatmap_*"
+        ]
+        for pattern in cleanup_patterns:
+            for filepath in glob.glob(pattern):
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
 
 if __name__ == "__main__":
     print("Starting Suraksha-Drishti API Server on http://localhost:8000")

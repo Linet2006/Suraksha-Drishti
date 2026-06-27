@@ -70,18 +70,42 @@ def ensure_image_format(filepath: str) -> str:
     if not filepath or not os.path.exists(filepath):
         return filepath
         
-    if filepath.lower().endswith(".pdf"):
+    lower_path = filepath.lower()
+    
+    # Convert PDF to Image
+    if lower_path.endswith(".pdf"):
         try:
+            import fitz
             doc = fitz.open(filepath)
             if len(doc) > 0:
                 page = doc[0]
-                # Render at 2x resolution for better QR scanning
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
                 new_path = filepath.replace(".pdf", "") + "_page0.jpg"
                 pix.save(new_path)
                 return new_path
         except Exception as e:
             print(f"PDF Conversion Error: {e}")
+            
+    # Guarantee OpenCV compatibility by re-saving the image using Pillow
+    # This prevents errors if a user manually renames an .avif to .jpg
+    try:
+        from PIL import Image
+        try:
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+        except ImportError:
+            pass
+            
+        img = Image.open(filepath)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        # Always save a fresh JPEG version
+        base, _ = os.path.splitext(filepath)
+        new_path = base + "_safe.jpg"
+        img.save(new_path, "JPEG", quality=100)
+        return new_path
+    except Exception as e:
+        print(f"Image Conversion Error: {e}")
             
     return filepath
 

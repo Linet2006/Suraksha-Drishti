@@ -95,6 +95,15 @@ def generate_overlay(image_path, issues_list):
             
         overlay_generated = True
         
+    if not overlay_generated:
+        # Draw a bright green stamp in the top left for genuine documents
+        text = "SUCCESS: VERIFIED GENUINE"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.rectangle(img, (20, 20), (450, 60), (0, 200, 0), -1)
+        cv2.putText(img, text, (30, 50), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.rectangle(img, (10, 10), (w - 10, h - 10), (0, 200, 0), 10) # Green border
+        overlay_generated = True
+        
     if overlay_generated:
         basename = os.path.basename(image_path)
         name, ext = os.path.splitext(basename)
