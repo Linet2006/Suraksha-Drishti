@@ -4,10 +4,10 @@ import cv2
 import datetime
 import os
 
-def error_level_analysis(image_path, quality=90, threshold=15.0):
+def error_level_analysis(image_path, quality=90, threshold=15.0, output_dir="data/outputs/salaryslip"):
     """
     Error Level Analysis highlights digitally edited regions.
-    Generates a visual heatmap.
+    Generates a visual heatmap overlaid onto the original image.
     """
     try:
         original = Image.open(image_path)
@@ -15,7 +15,7 @@ def error_level_analysis(image_path, quality=90, threshold=15.0):
         if original.mode != 'RGB':
             original = original.convert('RGB')
             
-        output_dir = os.path.abspath("data/outputs/salaryslip")
+        output_dir = os.path.abspath(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         temp_path = os.path.join(output_dir, "temp_resaved.jpg")
         original.save(temp_path, "JPEG", quality=quality)
@@ -23,38 +23,27 @@ def error_level_analysis(image_path, quality=90, threshold=15.0):
         
         ela_image = ImageChops.difference(original, resaved)
         
-        # --- Generate Heatmap ---
-        # Get max difference to scale the brightness so it's visible
+        # Generate Heatmap mathematically for variance calculation, but don't save to disk!
         extrema = ela_image.getextrema()
         max_diff = max([ex[1] for ex in extrema])
         if max_diff == 0: max_diff = 1
         scale = 255.0 / max_diff
         ela_enhanced = ImageEnhance.Brightness(ela_image).enhance(scale)
         
-        # Apply color map to create a heat map
-        ela_cv = cv2.cvtColor(np.array(ela_enhanced), cv2.COLOR_RGB2BGR)
+        # We no longer generate or save the bluish COLORMAP_JET image
+        # cv2.imwrite(heatmap_path, heatmap)
         
-        # Convert to grayscale first for a cleaner colormap application
-        gray_ela = cv2.cvtColor(ela_cv, cv2.COLOR_BGR2GRAY)
-        heatmap = cv2.applyColorMap(gray_ela, cv2.COLORMAP_JET)
-        
-        # Save the heatmap to the structured outputs directory
-        output_dir = os.path.abspath("data/outputs/salaryslip")
-        os.makedirs(output_dir, exist_ok=True)
-        heatmap_path = os.path.join(output_dir, f"ela_heatmap_{int(datetime.datetime.now().timestamp())}.jpg")
-        cv2.imwrite(heatmap_path, heatmap)
-        print(f"\n[+] Generated ELA Heatmap: {heatmap_path}")
+        heatmap_filename = None
         # ------------------------
         
         ela_array = np.array(ela_image)
         std_dev = ela_array.std()
         
-        # High variance regions = tampered zones
         if std_dev > threshold:
-            return "ELA_TAMPER_DETECTED", std_dev
-        return "CLEAN", std_dev
+            return "ELA_TAMPER_DETECTED", std_dev, heatmap_filename
+        return "CLEAN", std_dev, heatmap_filename
     except Exception as e:
-        return "ERROR", str(e)
+        return "ERROR", str(e), None
 
 def verify_exif_data(image_path, max_age_minutes=30):
     """
@@ -114,11 +103,11 @@ def check_visual_logic_paradox(image_path):
         return "PARADOX_DETECTED", "Visual AI flagged a contradiction: Document contains a handwritten signature but footer text states no physical signature is required."
     return "LOGIC_CLEAN", "No visual paradoxes found."
 
-def run_image_forensics(image_path):
+def run_image_forensics(image_path, output_dir="data/outputs/salaryslip"):
     """
     Runs all L1 Image Forensics checks.
     """
-    ela_status, ela_val = error_level_analysis(image_path)
+    ela_status, ela_val, heatmap_filename = error_level_analysis(image_path, output_dir=output_dir)
     exif_status, exif_val = verify_exif_data(image_path)
     texture_status, texture_val = analyze_paper_texture(image_path)
     logic_status, logic_val = check_visual_logic_paradox(image_path)
@@ -145,6 +134,7 @@ def run_image_forensics(image_path):
     return {
         "forensics_score": score,
         "forensics_issues": issues,
+        "heatmap_filename": heatmap_filename,
         "details": {
             "ela": ela_status,
             "exif": exif_status,
