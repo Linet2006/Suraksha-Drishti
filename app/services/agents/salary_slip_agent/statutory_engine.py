@@ -43,6 +43,12 @@ def check_statutory_invariants(extracted_data, employment_type, state="Karnataka
     
     annual_gross = gross * 12
     
+    # CRITICAL VETO: If the Gross Pay is missing or zero, the document is fundamentally invalid.
+    # This catches completely blurry images or completely fake AI generations that don't have real financial tables.
+    if gross <= 0:
+        score += 100
+        issues.append("CRITICAL VETO: Gross Pay could not be extracted or is zero. Invalid Salary Slip format.")
+    
     if employment_type == "CONSULTANT":
         # Consultants shouldn't have PF/PT/ESIC in standard formats
         if pf > 0 or pt > 0 or esic > 0:

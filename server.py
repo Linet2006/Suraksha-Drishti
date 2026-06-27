@@ -55,6 +55,37 @@ async def verify_salary_slip(file: UploadFile = File(...)):
                 except:
                     pass
 
+@app.post("/verify/property-paper")
+async def verify_property_paper(file: UploadFile = File(...)):
+    """
+    Upload a Property Paper (Sale Deed) to verify against the local SQLite Registry
+    to detect 'Already Sold' or 'Multiple Mortgage' fraud.
+    """
+    # Save the uploaded file temporarily
+    temp_file_path = f"data/outputs/property/temp_{file.filename}"
+    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+    with open(temp_file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    try:
+        from app.services.dna_comparison.main import ensure_image_format
+        temp_file_path = ensure_image_format(temp_file_path)
+        
+        from app.services.dna_comparison.property_dna import process_property_verification
+        result = process_property_verification(temp_file_path)
+        return result
+        
+    except Exception as e:
+        return {"error": str(e)}
+        
+    finally:
+        import glob
+        for filepath in glob.glob("data/outputs/property/temp_*"):
+            try:
+                os.remove(filepath)
+            except:
+                pass
+
 @app.post("/verify/kyc")
 async def verify_kyc(
     aadhaar_file: UploadFile = File(None),

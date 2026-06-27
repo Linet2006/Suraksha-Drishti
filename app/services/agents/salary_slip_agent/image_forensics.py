@@ -23,25 +23,17 @@ def error_level_analysis(image_path, quality=90, threshold=15.0, output_dir="dat
         
         ela_image = ImageChops.difference(original, resaved)
         
-        # --- Generate Heatmap (Classic Salary Slip JET Colormap) ---
+        # Generate Heatmap mathematically for variance calculation, but don't save to disk!
         extrema = ela_image.getextrema()
         max_diff = max([ex[1] for ex in extrema])
         if max_diff == 0: max_diff = 1
         scale = 255.0 / max_diff
         ela_enhanced = ImageEnhance.Brightness(ela_image).enhance(scale)
         
-        # Apply color map to create a heat map
-        ela_cv = cv2.cvtColor(np.array(ela_enhanced), cv2.COLOR_RGB2BGR)
+        # We no longer generate or save the bluish COLORMAP_JET image
+        # cv2.imwrite(heatmap_path, heatmap)
         
-        # Convert to grayscale first for a cleaner colormap application
-        gray_ela = cv2.cvtColor(ela_cv, cv2.COLOR_BGR2GRAY)
-        heatmap = cv2.applyColorMap(gray_ela, cv2.COLORMAP_JET)
-        
-        basename = os.path.basename(image_path)
-        name_only, ext = os.path.splitext(basename)
-        heatmap_filename = f"ela_heatmap_{name_only}_{int(datetime.datetime.now().timestamp())}.jpg"
-        heatmap_path = os.path.join(output_dir, heatmap_filename)
-        cv2.imwrite(heatmap_path, heatmap)
+        heatmap_filename = None
         # ------------------------
         
         ela_array = np.array(ela_image)
