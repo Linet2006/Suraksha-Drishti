@@ -14,7 +14,7 @@ if sys.stdout.encoding != 'utf-8':
 # Ensure Python can find our package
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.services.agents.salary_slip_agent.main import process_verification
+from app.services.dna_comparison.salary_slip_dna.main import process_verification
 
 def run_test(name, input_data, mock_aa_data=None, is_image=False):
     print(f"\n{'='*50}\nTEST: {name}\n{'='*50}")

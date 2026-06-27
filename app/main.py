@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.api.routes.verification import router as verification_router
 from app.api.routes.orchestration import router as orchestration_router
 import uvicorn

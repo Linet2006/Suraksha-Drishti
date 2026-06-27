@@ -13,11 +13,96 @@ from app.services.agents.itr_agent.scraper import verify_itr_status
 from app.services.agents.udyam_agent.scraper import verify_udyam_number
 from app.services.agents.trade_licence_agent.scraper import verify_trade_licence
 
+from app.services.dna_comparison.aadhaar_dna.main import run_aadhaar_dna_analysis
+from app.services.dna_comparison.pan_dna.main import run_pan_dna_analysis
+from app.services.dna_comparison.property_dna.main import run_property_dna_analysis
+from app.services.dna_comparison.salary_slip_dna.main import run_salary_slip_dna_analysis
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+def extract_metadata_with_gemma_local(file_bytes: bytes, is_pdf: bool, doc_type: str) -> dict:
+    """Uses local Gemma 3 via Ollama to extract text from document images. Data never leaves the machine."""
+    import base64
+    import requests
+    
+    prompts = {
+        "ITR/Form 16": "Extract from this document: gross_salary, standard_deduction, total_tax_payable, pan, expected_pan_status. Return ONLY a JSON object.",
+        "Udyam Certificate": "Extract the udyam_number from this certificate. Return ONLY a JSON object with key 'udyam_number'.",
+        "Trade Licence": "Extract the application_number, expected_business_name, expected_owner_name. Return ONLY a JSON object.",
+        "GST Registration": "Extract the GSTIN. Return ONLY a JSON object with key 'gstin'.",
+        "Salary Slip": "Extract the net_pay and employee_id. Return ONLY a JSON object.",
+        "Aadhaar": "Extract the 12-digit aadhaar_number (digits only, no spaces) and the full name of the person. Return ONLY a JSON object like {\"aadhaar_number\": \"123456789012\", \"name\": \"FULL NAME\"}.",
+        "PAN": "Extract the 10-character PAN number (like ABCPK1234F) and the full name. Return ONLY a JSON object like {\"pan_number\": \"ABCPK1234F\", \"name\": \"FULL NAME\"}.",
+        "Property": "Extract the execution_date and registration_date. Return ONLY a JSON object."
+    }
+    
+    prompt = prompts.get(doc_type, "Extract key-value pairs into a JSON object. Return ONLY raw JSON.")
+    
+    # --- Try Ollama (Gemma 3 local) first ---
+    try:
+        if is_pdf:
+            import pypdfium2 as pdfium
+            import io
+            # Render first page of PDF to image for Gemma
+            pdf = pdfium.PdfDocument(file_bytes)
+            page = pdf[0]
+            pil_image = page.render(scale=2).to_pil()
+            buf = io.BytesIO()
+            pil_image.save(buf, format='JPEG')
+            image_bytes_for_gemma = buf.getvalue()
+        else:
+            image_bytes_for_gemma = file_bytes
+            
+        b64_image = base64.b64encode(image_bytes_for_gemma).decode("utf-8")
+        
+        ollama_payload = {
+            "model": "gemma3:4b",
+            "prompt": prompt,
+            "images": [b64_image],
+            "stream": False
+        }
+        
+        resp = requests.post("http://localhost:11434/api/generate", json=ollama_payload, timeout=60)
+        
+        if resp.status_code == 200:
+            raw_response = resp.json().get("response", "")
+            logger.info(f"[GEMMA3 LOCAL] Raw response: {raw_response}")
+            
+            # Clean up the response
+            text = raw_response.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            
+            # Try to find JSON in the response
+            text = text.strip()
+            # Find the first { and last }
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1:
+                text = text[start:end+1]
+                
+            result = json.loads(text)
+            logger.info(f"[GEMMA3 LOCAL] Parsed: {result}")
+            return result
+        else:
+            logger.warning(f"[GEMMA3] Ollama returned status {resp.status_code}")
+    except requests.ConnectionError:
+        logger.warning("[GEMMA3] Ollama not running at localhost:11434. Falling back to Gemini API.")
+    except Exception as e:
+        logger.warning(f"[GEMMA3] Ollama error: {e}. Falling back to Gemini API.")
+    
+    # --- Fallback to Gemini API ---
+    return extract_metadata_with_gemini(file_bytes, is_pdf, doc_type)
+
+
 def extract_metadata_with_gemini(file_bytes: bytes, is_pdf: bool, doc_type: str) -> dict:
-    """Uses Gemini to extract structured JSON from the document based on its type."""
+    """Fallback: Uses Gemini API to extract structured JSON from the document."""
+    from google.genai import types
     try:
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     except Exception as e:
@@ -29,7 +114,10 @@ def extract_metadata_with_gemini(file_bytes: bytes, is_pdf: bool, doc_type: str)
         "Udyam Certificate": "Extract the udyam_number from this certificate. Return ONLY a JSON object with key 'udyam_number' and the string value, without markdown formatting.",
         "Trade Licence": "Extract the application_number, expected_business_name, and expected_owner_name from this trade licence. Return ONLY a JSON object with these keys without markdown formatting.",
         "GST Registration": "Extract the GSTIN from this document. Return ONLY a JSON object with key 'gstin' without markdown formatting.",
-        "Salary Slip": "Extract the net_pay and employee_id. Return ONLY a JSON object with these keys without markdown formatting."
+        "Salary Slip": "Extract the net_pay and employee_id. Return ONLY a JSON object with these keys without markdown formatting.",
+        "Aadhaar": "Extract the following from this Aadhaar card image into a JSON object: aadhaar_number (the 12-digit number, digits only, no spaces), name (full name of the person). Return ONLY raw JSON without markdown formatting.",
+        "PAN": "Extract the following from this PAN card image into a JSON object: pan_number (the 10-character alphanumeric PAN like ABCPK1234F), name (full name of the person). Return ONLY raw JSON without markdown formatting.",
+        "Property": "Extract the execution_date and registration_date. Return ONLY a JSON object with these keys without markdown formatting."
     }
     
     prompt = prompts.get(doc_type, "Extract key key-value pairs into a JSON object. Return ONLY raw JSON.")
@@ -39,7 +127,7 @@ def extract_metadata_with_gemini(file_bytes: bytes, is_pdf: bool, doc_type: str)
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=[
-                    {"mime_type": "application/pdf", "data": file_bytes},
+                    types.Part.from_bytes(data=file_bytes, mime_type="application/pdf"),
                     prompt
                 ]
             )
@@ -85,13 +173,27 @@ async def verify_orchestrate(
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     temp_path = temp_file.name
     
-    with open(temp_path, "wb") as f:
-        f.write(file_bytes)
+    temp_file.write(file_bytes)
+    temp_file.close()
         
     background_tasks.add_task(cleanup_file, temp_path)
     
-    # 1. Universal Scanner
-    extracted_data = extract_metadata_with_gemini(file_bytes, is_pdf, document_type)
+    # 1. Universal Scanner — Gemma 3 (local via Ollama) extracts text, falls back to Gemini API
+    extracted_data = extract_metadata_with_gemma_local(file_bytes, is_pdf, document_type)
+    
+    # Robust normalization for field names
+    if isinstance(extracted_data, dict):
+        keys = list(extracted_data.keys())
+        for k in keys:
+            kl = k.lower().replace(" ", "_")
+            if document_type == "PAN" and kl in ["pan", "pan_no", "pan_number", "pannumber", "pan_card_number"]:
+                extracted_data["pan_number"] = extracted_data[k]
+            if document_type == "Aadhaar" and kl in ["aadhaar", "aadhar", "aadhaar_number", "aadhar_number", "uid"]:
+                extracted_data["aadhaar_number"] = extracted_data[k]
+            if kl in ["name", "full_name", "fullname", "holder_name"]:
+                extracted_data["name"] = extracted_data[k]
+    
+    logger.info(f"Extracted metadata: {extracted_data}")
     
     # 2. Routing
     try:
@@ -130,6 +232,18 @@ async def verify_orchestrate(
                 for k, v in extracted_data.items():
                     extracted_data[k] = str(v)
                 result = await run_in_threadpool(run_itr_dna_analysis, temp_path, is_pdf, extracted_data)
+                return result
+            elif document_type == "Aadhaar":
+                result = await run_in_threadpool(run_aadhaar_dna_analysis, temp_path, is_pdf, extracted_data)
+                return result
+            elif document_type == "PAN":
+                result = await run_in_threadpool(run_pan_dna_analysis, temp_path, is_pdf, extracted_data)
+                return result
+            elif document_type == "Property":
+                result = await run_in_threadpool(run_property_dna_analysis, temp_path, is_pdf, extracted_data)
+                return result
+            elif document_type == "Salary Slip":
+                result = await run_in_threadpool(run_salary_slip_dna_analysis, temp_path, is_pdf, extracted_data)
                 return result
             else:
                 return {"bucket": 2, "status": "Requires Review", "differences": ["Forensic module pending"], "description": f"Forensic DNA analysis for {document_type} is still under development. Defaulting to manual review."}

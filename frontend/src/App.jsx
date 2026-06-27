@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle, AlertTriangle, XCircle, FileIcon, Loader2, Camera } from 'lucide-react';
 import './index.css';
 
@@ -13,6 +13,14 @@ function App() {
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (['Aadhaar', 'PAN', 'Property', 'Salary Slip'].includes(docType)) {
+      setMethod('Forensic Analysis');
+    } else if (['Udyam Certificate', 'Trade Licence', 'GST Registration'].includes(docType)) {
+      setMethod('Government Database');
+    }
+  }, [docType]);
 
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -192,6 +200,9 @@ function App() {
                 onChange={(e) => setDocType(e.target.value)}
               >
                 <option value="ITR/Form 16">ITR / Form 16</option>
+                <option value="Aadhaar">Aadhaar</option>
+                <option value="PAN">PAN</option>
+                <option value="Property">Property</option>
                 <option value="Udyam Certificate">Udyam Certificate</option>
                 <option value="Trade Licence">Trade Licence</option>
                 <option value="GST Registration">GST Registration</option>
@@ -202,34 +213,38 @@ function App() {
             <div className="input-group">
               <label>Verification Method</label>
               <div className="radio-group">
-                <label className={`radio-option ${method === 'Government Database' ? 'selected' : ''}`}>
-                  <input 
-                    type="radio" 
-                    name="method" 
-                    value="Government Database"
-                    checked={method === 'Government Database'}
-                    onChange={(e) => setMethod(e.target.value)}
-                    style={{ display: 'none' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <strong>Government Database</strong>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Cross-check with live government portals</span>
-                  </div>
-                </label>
-                <label className={`radio-option ${method === 'Forensic Analysis' ? 'selected' : ''}`}>
-                  <input 
-                    type="radio" 
-                    name="method" 
-                    value="Forensic Analysis"
-                    checked={method === 'Forensic Analysis'}
-                    onChange={(e) => setMethod(e.target.value)}
-                    style={{ display: 'none' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <strong>DNA Forensic Analysis</strong>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Detect image manipulation & math forgery</span>
-                  </div>
-                </label>
+                {['ITR/Form 16', 'Udyam Certificate', 'Trade Licence', 'GST Registration'].includes(docType) && (
+                  <label className={`radio-option ${method === 'Government Database' ? 'selected' : ''}`}>
+                    <input 
+                      type="radio" 
+                      name="method" 
+                      value="Government Database"
+                      checked={method === 'Government Database'}
+                      onChange={(e) => setMethod(e.target.value)}
+                      style={{ display: 'none' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <strong>Government Database</strong>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Cross-check with live government portals</span>
+                    </div>
+                  </label>
+                )}
+                {['ITR/Form 16', 'Aadhaar', 'PAN', 'Property', 'Salary Slip'].includes(docType) && (
+                  <label className={`radio-option ${method === 'Forensic Analysis' ? 'selected' : ''}`}>
+                    <input 
+                      type="radio" 
+                      name="method" 
+                      value="Forensic Analysis"
+                      checked={method === 'Forensic Analysis'}
+                      onChange={(e) => setMethod(e.target.value)}
+                      style={{ display: 'none' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <strong>DNA Forensic Analysis</strong>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Detect image manipulation & math forgery</span>
+                    </div>
+                  </label>
+                )}
               </div>
             </div>
 
