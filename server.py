@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 import os
 import shutil
-from app.services.agents.salary_slip_agent.main import process_verification
+from app.services.dna_comparison.salary_slip_dna.main import process_verification
 from app.services.dna_comparison.main import process_kyc_verification
 from app.services.dna_comparison.kyc_explainability import generate_kyc_overlay
 
