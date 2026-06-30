@@ -31,7 +31,14 @@ The backend requires Python 3.10+ and uses a virtual environment.
    # On Mac/Linux:
    source .venv/bin/activate
    ```
-3. Install the dependencies:
+3. Create your environment variables file:
+   Rename the provided `.env.example` file to `.env` and paste your Gemini API key inside it.
+   ```bash
+   cp .env.example .env
+   ```
+   *(You can get a free API key from [Google AI Studio](https://aistudio.google.com/))*
+
+4. Install the dependencies:
    ```bash
    pip install -r requirements.txt
    ```
